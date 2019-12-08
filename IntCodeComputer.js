@@ -1,22 +1,26 @@
 const run  =  function *(program){
     let output = 0;
+    let numberOfInputInstProcessed = 0;
+    console.log('initial numberOfInputInstProcessed', numberOfInputInstProcessed);
     for(let i=0;i<program.length;)
     {
         if(program[i] === 99){
-            console.log('Finished processing ');
+            console.log('quiting ', output);
             return;
         }
         if(program[i] === 4){
             output = program[program[i+1]];
             i+=2;
-            console.log('writing output and yielding', output);
+            console.log('yielding ', output);
             yield output;
             continue;
         }
         if(program[i] === 3){
-            console.log('Yielding for input and returing', output);
-            program[program[i+1]] = yield output;
-            console.log('Obtained input and continuing', program[program[i+1]]);
+            numberOfInputInstProcessed++;
+            console.log('numberOfInputInstProcessed', numberOfInputInstProcessed);
+            console.log('yielding for input ');
+            program[program[i+1]] = yield;
+            console.log('received input ', program[program[i+1]]);
             i+=2;
             continue;
         }
