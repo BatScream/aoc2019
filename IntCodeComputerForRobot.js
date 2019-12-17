@@ -5,100 +5,125 @@ const MODES = Object.freeze({
     RELATIVE: 2
 });
 
-const run = function * (instructions){
+const INSTRUCTIONS = Object.freeze({
+  ADD: 1,
+  MUL: 2,
+  INPUT: 3,
+  OUTPUT: 4,
+  JUMP_IF_TRUE: 5,
+  JUMP_IF_FALSE: 6,
+  LESS_THAN: 7,
+  EQUALS: 8,
+  ADJUST_RELATIVE_BASE: 9,
+  HALT: 99
+});
+
+const run = function *(instructions){
     let relativeBase = 0;
-    let data = [...instructions];
+    let data = instructions.slice();
     for(let i=0;i<instructions.length;)
-    {
-        if(data[i] === 99){
-            break;
-        }
+    {   
         const result = parseCode(data[i]);
         const opcode = result.opcode;
-        const parameterModes = result.parameterModes;
-        const parameterModeOne = parameterModes[0] || 0;
-        const parameterModeTwo = parameterModes[1] || 0;
-        const parameterModeThree = parameterModes[2] || 0;
-    
-        const one = (parameterModeOne == MODES.IMMEDIATE) ? data[i+1] : (parameterModeOne == MODES.POSITION) ? data[data[i+1]] : data[data[i+1] + relativeBase];
-        const two = (parameterModeTwo == MODES.IMMEDIATE) ? data[i+2] : (parameterModeOne == MODES.POSITION) ? data[data[i+2]] : data[data[i+2] + relativeBase];
-        if(opcode === 3){
-            //console.log('yielding for input');
-            data[parameterModeOne === 2 ? data[i+1] + relativeBase : data[i+1]] = yield;
-            //console.log('got input yielding', data[parameterModeOne === 2 ? data[i+1] + relativeBase : data[i+1]]);
-            i+=2;
-            continue;
-        }
-        if(opcode === 4){
-            console.log('yielding output', one);
-            yield one;
-            i+=2;
-            continue;
-        }
-        if(opcode === 5){
-            if(one){
-                i = two;
+        const modes = result.parameterModes;
+        switch(opcode){
+            case INSTRUCTIONS.ADD:{
+                const x = getValue(data[i+1], modes[2]);
+                const y = getValue(data[i+2], modes[1])
+                setValue(data[i+3], x + y, modes[0]);
+                i+=4;
             }
-            else{
-                i+=3;
+                break;
+            case INSTRUCTIONS.MUL:{
+                const x = getValue(data[i+1], modes[2]);
+                const y = getValue(data[i+2], modes[1]);
+                setValue(data[i+3], x * y, modes[0]);
+                i+=4;
             }
-            continue;
-        }
-        if(opcode === 6){
-            if(!one){
-                i = two;
-            }
-            else{
-                i+=3;
-            }
-            continue;
-        }
-        if(opcode === 7){
-            if(one < two){
-                data[parameterModeThree === 2 ? data[i+3] + relativeBase : data[i+3]] = 1;
-            }
-            else{
-                data[parameterModeThree === 2 ? data[i+3] + relativeBase : data[i+3]] = 0;
-            }
-            i+=4;
-            continue;
-        }
-        if(opcode === 8){
-            if(one === two){
-                data[parameterModeThree === 2 ? data[i+3] + relativeBase : data[i+3]] = 1;
-            }
-            else{
-                data[parameterModeThree === 2 ? data[i+3] + relativeBase : data[i+3]] = 0;
-            }
-            i+=4;
-            continue;
-        }
-        if(opcode === 9){
-            relativeBase += one;
-            data = Array.from({length: data.length + one}, (v, index) => data[index] || 0);
-            i+=2;
-            continue;
-        }
-        if(opcode === 1 || opcode === 2){
-            if(opcode === 1){
-                data[parameterModeThree === 2 ? data[i+3] + relativeBase : data[i+3]] = one + two;
-            }
-            else{
-                data[parameterModeThree === 2 ? data[i+3] + relativeBase : data[i+3]] = one * two;
-            } 
-            i+=4;
-        }
-        else i+=4;
-    }
-}
+                break;
+            case INSTRUCTIONS.INPUT:
+                setValue(data[i+1], yield, modes[2]);
+                i+=2;
+                break;
+            case INSTRUCTIONS.OUTPUT:
+                yield getValue(data[i+1], modes[2]);
+                i+=2;
+                break;
+            case INSTRUCTIONS.JUMP_IF_TRUE:{
+                const compare = getValue(data[i+1], modes[2]);
+                const jumpTo = getValue(data[i+2], modes[1]);
+                if (compare !== 0) {
+                    i = jumpTo;
+                }else{
+                    i+=3;
+                }
 
-function parseCode(code){
-    const opcode = code%100;
-    const parameterModes = Math.floor(code/100).toString().split('').reverse().map(m => parseInt(m));
-    return{
-        opcode,
-        parameterModes
+            }
+                break;
+            case INSTRUCTIONS.JUMP_IF_FALSE:{
+                const compare = getValue(data[i+1], modes[2]);
+                const jumpTo = getValue(data[i+2], modes[1]);
+                if (compare === 0) {
+                    i = jumpTo;
+                }else{
+                    i+=3;
+                }
+            }
+                break;
+            case INSTRUCTIONS.LESS_THAN:{
+                const x = getValue(data[i+1], modes[2]);
+                const y = getValue(data[i+2], modes[1]);
+                setValue(data[i+3], x < y ? 1 : 0, modes[0]);
+                i+=4;
+            }
+                break;
+            case INSTRUCTIONS.EQUALS:{
+                const x = getValue(data[i+1], modes[2]);
+                const y = getValue(data[i+2], modes[1]);
+                setValue(data[i+3], x === y ? 1 : 0, modes[0]);
+                i+=4;
+            }
+                break;
+            case INSTRUCTIONS.ADJUST_RELATIVE_BASE:{
+                const adjustBy = getValue(data[i+1], modes[2]);
+                relativeBase += adjustBy;
+                i+=2;
+            }
+                break;
+            case INSTRUCTIONS.HALT:
+                return;
+        }
     }
+
+    function getValue(value, mode = MODES.POSITION) {
+        if (mode === MODES.POSITION) {
+          return data[value] || 0;
+        } else if (mode === MODES.IMMEDIATE) {
+          return value;
+        } else if (mode === MODES.RELATIVE) {
+          return data[relativeBase + value] || 0;
+        }
+    }
+
+    function setValue(index, value, mode = 0) {
+        if (mode === MODES.POSITION) {
+          data[index] = value;
+        } else if (mode === MODES.RELATIVE) {
+          data[relativeBase + index] = value;
+        }
+      }
+
+    function parseCode(instruction){
+        const parsed = String(instruction)
+            .padStart(5, '0')
+            .split('')
+        const opcode = Number(parsed.slice(3).join(''));
+        const parameterModes = parsed.slice(0, 3).map(modes => parseInt(modes));
+        return{
+            opcode,
+            parameterModes
+        }
+    }      
 }
 
 module.exports = run;
